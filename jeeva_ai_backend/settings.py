@@ -30,13 +30,15 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-7w0coe7@b-#(r*_3r45bgm&$h2
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-# Railway-friendly ALLOWED_HOSTS
+# Production-friendly ALLOWED_HOSTS (supports Render, Railway, and others)
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
     '.railway.app',  # Railway domains
     '.up.railway.app',  # Railway app domains
-    '*',  # Allow all hosts for Railway
+    '.render.com',  # Render domains
+    '.onrender.com',  # Render app domains
+    '*',  # Allow all hosts (restrict in production)
 ]
 
 
@@ -50,9 +52,11 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt',
     'corsheaders',
     'whitenoise.runserver_nostatic',  # WhiteNoise for static files
     'ai_analysis',
+    'authentication',  # Custom authentication app
 ]
 
 MIDDLEWARE = [
@@ -90,23 +94,21 @@ WSGI_APPLICATION = 'jeeva_ai_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# Database configuration
+# Database configuration - ALWAYS USE POSTGRESQL
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-if DATABASE_URL:
-    # Production: Use PostgreSQL from Render
-    import dj_database_url
-    DATABASES = {
-        'default': dj_database_url.parse(DATABASE_URL)
-    }
-else:
-    # Development: Use SQLite
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+if not DATABASE_URL:
+    raise ValueError(
+        "DATABASE_URL environment variable is required. "
+        "Please set it in your .env file. "
+        "Example: DATABASE_URL=postgresql://user:password@localhost:5432/jeeva_db"
+    )
+
+# Always use PostgreSQL
+import dj_database_url
+DATABASES = {
+    'default': dj_database_url.parse(DATABASE_URL)
+}
 
 
 # Password validation
@@ -150,10 +152,17 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Custom User Model
+AUTH_USER_MODEL = 'authentication.User'
+
 # REST Framework settings
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.AllowAny',  # Changed to AllowAny, override in views
     ],
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -163,6 +172,21 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.MultiPartParser',
         'rest_framework.parsers.FormParser',
     ],
+}
+
+# JWT Settings
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'ALGORITHM': 'HS256',
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
+    'USER_ID_FIELD': 'id',
+    'USER_ID_CLAIM': 'user_id',
 }
 
 # CORS settings
@@ -197,3 +221,15 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 FIRECRAWL_API_KEY = os.getenv('FIRECRAWL_API_KEY')
 DR7_API_KEY = os.getenv('DR7_API_KEY')
+
+# Email Configuration
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@jeeva.ai')
+
+# Frontend URL for email links
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
