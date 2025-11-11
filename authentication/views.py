@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.conf import settings
 from datetime import timedelta
 import secrets
 import hashlib
@@ -26,24 +27,46 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        
-        # Generate JWT tokens
-        refresh = RefreshToken.for_user(user)
-        
-        # Get user data with profile
-        user_serializer = UserSerializer(user)
-        
-        return Response({
-            'message': 'User registered successfully. Please check your email to verify your account.',
-            'user': user_serializer.data,
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            }
-        }, status=status.HTTP_201_CREATED)
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            user = serializer.save()
+            
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            
+            # Get user data with profile
+            user_serializer = UserSerializer(user)
+            
+            return Response({
+                'message': 'User registered successfully. Please check your email to verify your account.',
+                'user': user_serializer.data,
+                'tokens': {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                }
+            }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            import traceback
+            error_message = str(e)
+            print(f"Registration error: {error_message}")
+            print(traceback.format_exc())
+            
+            # Handle specific database errors with better messages
+            if 'duplicate key' in error_message.lower() or 'already exists' in error_message.lower():
+                if 'email' in error_message.lower():
+                    error_message = 'An account with this email already exists.'
+                elif 'username' in error_message.lower():
+                    error_message = 'This username is already taken.'
+                return Response({
+                    'detail': error_message,
+                    'error': error_message
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            return Response({
+                'detail': error_message,
+                'error': 'Registration failed. Please check the server logs for details.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class LoginView(generics.GenericAPIView):
@@ -99,7 +122,8 @@ def current_user_view(request):
 def password_reset_request_view(request):
     """Request password reset - sends email with reset token"""
     serializer = PasswordResetRequestSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     email = serializer.validated_data['email']
     try:
@@ -122,17 +146,37 @@ def password_reset_request_view(request):
         expires_at=expires_at
     )
     
+    # In development mode, always print the reset link to console
+    if settings.DEBUG:
+        reset_link = f"{settings.FRONTEND_URL}/auth/reset-password?token={token}"
+        print(f"\n{'='*80}")
+        print(f"{' '*20}PASSWORD RESET LINK (Development Mode)")
+        print(f"{'='*80}")
+        print(f"Email: {user.email}")
+        print(f"Reset Link: {reset_link}")
+        print(f"{'='*80}\n")
+        print("⚠️  IMPORTANT: In development mode, emails are NOT sent via SMTP.")
+        print("⚠️  Copy the reset link above and use it to reset your password.\n")
+    
     # Send email with reset link
     try:
         send_password_reset_email(user, token)
+        # In development, console backend will also print the email
+        response_message = 'If an account exists with this email, a password reset link has been sent.'
+        if settings.DEBUG:
+            response_message += ' Check the Django console for the reset link.'
         return Response({
-            'message': 'If an account exists with this email, a password reset link has been sent.'
+            'message': response_message
         }, status=status.HTTP_200_OK)
     except Exception as e:
         # Log error but don't reveal it to user
-        print(f"Error sending password reset email: {str(e)}")
+        print(f"Error sending email: {str(e)}")
+        # In development, the link was already printed above
+        response_message = 'If an account exists with this email, a password reset link has been sent.'
+        if settings.DEBUG:
+            response_message += ' Check the Django console for the reset link.'
         return Response({
-            'message': 'If an account exists with this email, a password reset link has been sent.'
+            'message': response_message
         }, status=status.HTTP_200_OK)
 
 

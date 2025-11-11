@@ -38,13 +38,19 @@ class RegisterSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True, required=True)
     full_name = serializers.CharField(required=True, max_length=255)
-    phone = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    phone = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=20)
     role = serializers.ChoiceField(choices=[('patient', 'Patient'), ('doctor', 'Doctor')], default='patient')
     
     # Optional profile fields
     date_of_birth = serializers.DateField(required=False, allow_null=True)
     gender = serializers.ChoiceField(choices=[('male', 'Male'), ('female', 'Female'), ('other', 'Other')], required=False, allow_null=True)
     blood_group = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=10)
+    allergies = serializers.ListField(child=serializers.CharField(), required=False, allow_empty=True, default=list)
+    
+    # Emergency contact fields
+    emergency_contact_name = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=255)
+    emergency_contact_phone = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=20)
+    emergency_contact_relationship = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=50)
     
     # Doctor-specific fields
     specialization = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=255)
@@ -53,9 +59,25 @@ class RegisterSerializer(serializers.Serializer):
     experience = serializers.IntegerField(required=False, default=0)
     consultation_fee = serializers.DecimalField(required=False, max_digits=10, decimal_places=2, default=0.00)
 
+    def validate_email(self, value):
+        """Check if email already exists"""
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("An account with this email already exists. Please use a different email or try logging in.")
+        return value
+    
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
             raise serializers.ValidationError({"password": "Password fields didn't match."})
+        
+        # Convert empty strings to None for optional fields
+        optional_fields = ['phone', 'gender', 'blood_group', 'date_of_birth',
+                          'emergency_contact_name', 'emergency_contact_phone', 
+                          'emergency_contact_relationship', 'specialization',
+                          'license_number', 'hospital']
+        for field in optional_fields:
+            if field in attrs and attrs[field] == '':
+                attrs[field] = None
+        
         return attrs
 
     def create(self, validated_data):
@@ -70,6 +92,10 @@ class RegisterSerializer(serializers.Serializer):
             'date_of_birth': validated_data.pop('date_of_birth', None),
             'gender': validated_data.pop('gender', None),
             'blood_group': validated_data.pop('blood_group', None),
+            'allergies': validated_data.pop('allergies', []),
+            'emergency_contact_name': validated_data.pop('emergency_contact_name', None),
+            'emergency_contact_phone': validated_data.pop('emergency_contact_phone', None),
+            'emergency_contact_relationship': validated_data.pop('emergency_contact_relationship', None),
             'specialization': validated_data.pop('specialization', None),
             'license_number': validated_data.pop('license_number', None),
             'hospital': validated_data.pop('hospital', None),
@@ -82,7 +108,7 @@ class RegisterSerializer(serializers.Serializer):
             email=validated_data['email'],
             username=validated_data.get('username', validated_data['email']),
             password=password,
-            phone=validated_data.get('phone', ''),
+            phone=validated_data.get('phone') or None,  # Use None instead of empty string
             role=role,
             **{k: v for k, v in validated_data.items() if k in ['first_name', 'last_name']}
         )

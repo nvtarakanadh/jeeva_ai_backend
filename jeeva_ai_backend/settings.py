@@ -94,21 +94,24 @@ WSGI_APPLICATION = 'jeeva_ai_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# Database configuration - ALWAYS USE POSTGRESQL
+# Database configuration
+# Use PostgreSQL in production (when DATABASE_URL is set), SQLite for local development
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-if not DATABASE_URL:
-    raise ValueError(
-        "DATABASE_URL environment variable is required. "
-        "Please set it in your .env file. "
-        "Example: DATABASE_URL=postgresql://user:password@localhost:5432/jeeva_db"
-    )
-
-# Always use PostgreSQL
-import dj_database_url
-DATABASES = {
-    'default': dj_database_url.parse(DATABASE_URL)
-}
+if DATABASE_URL:
+    # Production: Use PostgreSQL
+    import dj_database_url
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL)
+    }
+else:
+    # Local development: Use SQLite
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -223,7 +226,13 @@ FIRECRAWL_API_KEY = os.getenv('FIRECRAWL_API_KEY')
 DR7_API_KEY = os.getenv('DR7_API_KEY')
 
 # Email Configuration
-EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
+# For development: Use console backend (emails print to console)
+# For production: Use SMTP backend with proper credentials
+if DEBUG:
+    EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+else:
+    EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
+
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
