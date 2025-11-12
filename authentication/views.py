@@ -53,11 +53,21 @@ class RegisterView(generics.CreateAPIView):
             print(traceback.format_exc())
             
             # Handle specific database errors with better messages
-            if 'duplicate key' in error_message.lower() or 'already exists' in error_message.lower():
-                if 'email' in error_message.lower():
-                    error_message = 'An account with this email already exists.'
+            if 'duplicate key' in error_message.lower() or 'already exists' in error_message.lower() or 'unique constraint' in error_message.lower():
+                # Check if user already exists
+                email = request.data.get('email', '')
+                if email and User.objects.filter(email=email).exists():
+                    error_message = 'An account with this email already exists. Please use a different email or try logging in.'
+                elif 'email' in error_message.lower():
+                    error_message = 'An account with this email already exists. Please use a different email or try logging in.'
                 elif 'username' in error_message.lower():
-                    error_message = 'This username is already taken.'
+                    error_message = 'This username is already taken. Please choose a different username.'
+                elif 'profile' in error_message.lower() or 'profiles' in error_message.lower():
+                    # Profile already exists - user exists but profile creation failed
+                    error_message = 'An account with this email already exists. Please try logging in instead.'
+                else:
+                    error_message = 'An account with this information already exists. Please try logging in.'
+                
                 return Response({
                     'detail': error_message,
                     'error': error_message

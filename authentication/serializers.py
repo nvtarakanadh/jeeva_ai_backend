@@ -103,6 +103,13 @@ class RegisterSerializer(serializers.Serializer):
             'consultation_fee': validated_data.pop('consultation_fee', 0.00),
         }
         
+        # Check if user already exists (double-check, even though validate_email should catch this)
+        email = validated_data['email']
+        if User.objects.filter(email=email).exists():
+            raise serializers.ValidationError({
+                'email': 'An account with this email already exists. Please use a different email or try logging in.'
+            })
+        
         # Create user
         user = User.objects.create_user(
             email=validated_data['email'],
@@ -113,8 +120,17 @@ class RegisterSerializer(serializers.Serializer):
             **{k: v for k, v in validated_data.items() if k in ['first_name', 'last_name']}
         )
         
-        # Create profile
-        UserProfile.objects.create(user=user, **profile_data)
+        # Create profile - use get_or_create to handle race conditions
+        profile, created = UserProfile.objects.get_or_create(
+            user=user,
+            defaults=profile_data
+        )
+        
+        # If profile already existed, update it with new data
+        if not created:
+            for key, value in profile_data.items():
+                setattr(profile, key, value)
+            profile.save()
         
         return user
 
