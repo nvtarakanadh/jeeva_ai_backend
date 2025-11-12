@@ -3,7 +3,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     RegisterView, LoginView, logout_view, current_user_view,
     password_reset_request_view, password_reset_confirm_view,
-    change_password_view, profile_view
+    change_password_view, profile_view, delete_account_view
 )
 
 app_name = 'authentication'
@@ -18,6 +18,7 @@ urlpatterns = [
     # User endpoints
     path('me/', current_user_view, name='current_user'),
     path('profile/', profile_view, name='profile'),
+    path('account/delete/', delete_account_view, name='delete_account'),
     
     # Password management
     path('password/reset/request/', password_reset_request_view, name='password_reset_request'),

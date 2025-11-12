@@ -248,6 +248,32 @@ def change_password_view(request):
     }, status=status.HTTP_200_OK)
 
 
+@api_view(['DELETE'])
+@permission_classes([permissions.IsAuthenticated])
+def delete_account_view(request):
+    """Delete user account and all associated data"""
+    try:
+        user = request.user
+        
+        # Delete user profile (cascade will handle related data)
+        if hasattr(user, 'profile'):
+            user.profile.delete()
+        
+        # Delete the user (this will cascade delete related data)
+        user.delete()
+        
+        return Response({
+            'message': 'Account deleted successfully'
+        }, status=status.HTTP_200_OK)
+    except Exception as e:
+        import traceback
+        print(f"Error deleting account: {str(e)}")
+        print(traceback.format_exc())
+        return Response({
+            'detail': 'Failed to delete account. Please try again or contact support.'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @api_view(['GET', 'PUT', 'PATCH'])
 @permission_classes([permissions.IsAuthenticated])
 def profile_view(request):
