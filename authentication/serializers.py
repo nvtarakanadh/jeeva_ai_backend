@@ -129,18 +129,19 @@ class LoginSerializer(serializers.Serializer):
         password = attrs.get('password')
 
         if email and password:
-            # Try to get user by email (since email is USERNAME_FIELD)
-            try:
-                user = User.objects.get(email=email)
-                # Authenticate using username (which is email in our case)
-                user = authenticate(request=self.context.get('request'), username=user.username, password=password)
-            except User.DoesNotExist:
-                user = None
+            # Authenticate using email directly (since USERNAME_FIELD = 'email')
+            user = authenticate(request=self.context.get('request'), username=email, password=password)
             
             if not user:
-                raise serializers.ValidationError({'detail': 'Invalid email or password.'})
+                # Check if user exists to provide better error message
+                if User.objects.filter(email=email).exists():
+                    raise serializers.ValidationError({'detail': 'Invalid password. Please check your password and try again.'})
+                else:
+                    raise serializers.ValidationError({'detail': 'No account found with this email address. Please register first.'})
+            
             if not user.is_active:
-                raise serializers.ValidationError({'detail': 'User account is disabled.'})
+                raise serializers.ValidationError({'detail': 'User account is disabled. Please contact support.'})
+            
             attrs['user'] = user
         else:
             raise serializers.ValidationError({'detail': 'Must include "email" and "password".'})
