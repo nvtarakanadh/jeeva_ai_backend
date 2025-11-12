@@ -193,9 +193,13 @@ SIMPLE_JWT = {
 }
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8081,http://127.0.0.1:8081').split(',')
+# In production, add your Vercel domain to CORS_ALLOWED_ORIGINS environment variable
+# Example: https://your-app.vercel.app,https://your-app-git-main.vercel.app
+default_cors_origins = 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8081,http://127.0.0.1:8081'
+CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', default_cors_origins).split(',')
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all origins in development
+# In production (DEBUG=False), make sure to set CORS_ALLOWED_ORIGINS with your Vercel domain
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all origins in development only
 CORS_ALLOWED_HEADERS = [
     'accept',
     'accept-encoding',
