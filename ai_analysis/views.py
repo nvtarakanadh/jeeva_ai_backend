@@ -247,7 +247,20 @@ def analyze_health_record(request):
                 }, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
         else:
             # This is text input or other record type, use text analysis
-            analysis_result = analyze_health_record_with_ai(serializer.validated_data)
+            try:
+                analysis_result = analyze_health_record_with_ai(serializer.validated_data)
+            except Exception as ai_error:
+                print(f"❌ AI analysis failed: {str(ai_error)}")
+                import traceback
+                print(traceback.format_exc())
+                # Return a fallback analysis instead of failing completely
+                from .ai_services import create_fallback_analysis
+                analysis_result = create_fallback_analysis(
+                    serializer.validated_data.get('record_type', 'unknown'),
+                    serializer.validated_data.get('title', 'Health Record'),
+                    serializer.validated_data.get('description', ''),
+                    str(ai_error)
+                )
         
         # Use the record ID from the frontend if provided, otherwise create a new one
         record_id = serializer.validated_data.get('record_id', str(uuid.uuid4()))

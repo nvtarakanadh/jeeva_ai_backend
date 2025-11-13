@@ -1515,11 +1515,21 @@ def analyze_health_record_with_ai(record_data: Dict) -> Dict:
         title = record_data.get('title', 'Health Record')
         description = record_data.get('description', '')
         
+        # Check if we have any API keys configured
+        has_dr7_key = hasattr(settings, 'DR7_API_KEY') and settings.DR7_API_KEY
+        has_gemini_key = hasattr(settings, 'GEMINI_API_KEY') and settings.GEMINI_API_KEY
+        
+        if not has_dr7_key and not has_gemini_key:
+            print("⚠️ No AI API keys configured. Returning fallback analysis.")
+            return create_fallback_analysis(record_type, title, description)
+        
         # Try Dr7.ai first for all record types
-        if hasattr(settings, 'DR7_API_KEY') and settings.DR7_API_KEY:
+        if has_dr7_key:
             try:
                 print(f"🔍 Attempting Dr7.ai analysis for {record_type}")
-                return analyze_text_with_dr7(description, record_type)
+                result = analyze_text_with_dr7(description or title, record_type)
+                if result:
+                    return result
             except Exception as dr7_error:
                 print(f"❌ Dr7.ai analysis failed: {str(dr7_error)}")
                 print(f"🔄 Falling back to Gemini for {record_type} analysis")
