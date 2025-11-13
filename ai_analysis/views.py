@@ -143,6 +143,7 @@ def analyze_prescription(request):
 
 @api_view(['POST', 'OPTIONS'])
 @parser_classes([JSONParser])
+@permission_classes([IsAuthenticated])
 def analyze_health_record(request):
     """Analyze health record data using AI"""
     
@@ -151,6 +152,12 @@ def analyze_health_record(request):
         return cors_response({}, status_code=status.HTTP_200_OK)
     
     try:
+        # Get user profile for creating health record
+        user_profile = UserProfile.objects.filter(user=request.user).first()
+        if not user_profile:
+            return cors_response({
+                'error': 'User profile not found'
+            }, status_code=status.HTTP_404_NOT_FOUND)
         # Convert empty string file_url to None to avoid URL validation errors
         data = request.data.copy()
         if 'file_url' in data and (data['file_url'] == '' or data['file_url'] is None):
@@ -254,18 +261,48 @@ def analyze_health_record(request):
             # Fallback to current time if parsing fails
             record_date = timezone.now()
         
-        health_record = HealthRecord.objects.create(
-            id=record_id,
-            patient_id=serializer.validated_data.get('patient_id', 'unknown'),
-            record_type=serializer.validated_data['record_type'],
-            title=serializer.validated_data['title'],
-            description=serializer.validated_data.get('description', ''),
-            file_url=serializer.validated_data.get('file_url'),
-            file_name=serializer.validated_data.get('file_name'),
-            file_type=serializer.validated_data.get('file_name', '').split('.')[-1] if serializer.validated_data.get('file_name') else None,
-            record_date=record_date,
-            uploaded_by=serializer.validated_data.get('uploaded_by', 'system')
-        )
+        # Get patient_id from validated data or use current user's profile
+        patient_id = serializer.validated_data.get('patient_id')
+        if patient_id:
+            # Try to find patient profile by ID
+            try:
+                patient_profile = UserProfile.objects.get(id=patient_id)
+            except (UserProfile.DoesNotExist, ValueError):
+                # If patient_id not found or invalid, use current user's profile
+                patient_profile = user_profile
+        else:
+            # Use current user's profile as patient
+            patient_profile = user_profile
+        
+        # Check if record already exists (if record_id was provided)
+        try:
+            health_record = HealthRecord.objects.get(id=record_id)
+            # Update existing record
+            health_record.record_type = serializer.validated_data['record_type']
+            health_record.title = serializer.validated_data['title']
+            health_record.description = serializer.validated_data.get('description', '')
+            health_record.file_url = serializer.validated_data.get('file_url')
+            health_record.file_name = serializer.validated_data.get('file_name')
+            health_record.file_type = serializer.validated_data.get('file_name', '').split('.')[-1] if serializer.validated_data.get('file_name') else None
+            health_record.record_date = record_date
+            health_record.uploaded_by = serializer.validated_data.get('uploaded_by', str(request.user.id))
+            health_record.uploaded_by_profile = user_profile
+            health_record.save()
+        except HealthRecord.DoesNotExist:
+            # Create new record
+            health_record = HealthRecord.objects.create(
+                id=record_id,
+                patient=patient_profile,
+                record_type=serializer.validated_data['record_type'],
+                title=serializer.validated_data['title'],
+                description=serializer.validated_data.get('description', ''),
+                file_url=serializer.validated_data.get('file_url'),
+                file_name=serializer.validated_data.get('file_name'),
+                file_type=serializer.validated_data.get('file_name', '').split('.')[-1] if serializer.validated_data.get('file_name') else None,
+                record_date=record_date,
+                uploaded_by=serializer.validated_data.get('uploaded_by', str(request.user.id)),
+                uploaded_by_profile=user_profile
+            )
         
         # Create AI analysis - handle simplified_summary column gracefully
         try:
