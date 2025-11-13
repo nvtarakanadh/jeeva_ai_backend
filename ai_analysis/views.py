@@ -619,9 +619,19 @@ def health_records_list_create(request):
             # List health records for the current user
             records = HealthRecord.objects.filter(patient=user_profile).order_by('-record_date', '-uploaded_at')
             serializer = HealthRecordSerializer(records, many=True)
+            
+            # Convert relative file URLs to absolute HTTPS URLs
+            scheme = 'https' if not settings.DEBUG else request.scheme
+            host = request.get_host()
+            results = []
+            for record_data in serializer.data:
+                if record_data.get('file_url') and record_data['file_url'].startswith('/'):
+                    record_data['file_url'] = f"{scheme}://{host}{record_data['file_url']}"
+                results.append(record_data)
+            
             return cors_response({
                 'count': records.count(),
-                'results': serializer.data
+                'results': results
             }, status_code=status.HTTP_200_OK)
         
         elif request.method == 'POST':
