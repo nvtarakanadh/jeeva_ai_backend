@@ -47,7 +47,7 @@ class HealthRecordAnalysisRequestSerializer(serializers.Serializer):
     description = serializers.CharField(required=False, default="", allow_blank=True)
     record_type = serializers.CharField()
     service_date = serializers.CharField()  # Changed from DateTimeField to CharField
-    file_url = serializers.URLField(required=False, allow_blank=True)
+    file_url = serializers.URLField(required=False, allow_blank=True, allow_null=True)
     file_name = serializers.CharField(max_length=255, required=False, allow_blank=True)
     patient_id = serializers.CharField(max_length=255, required=False, allow_blank=True)
     uploaded_by = serializers.CharField(max_length=255, required=False, allow_blank=True)
