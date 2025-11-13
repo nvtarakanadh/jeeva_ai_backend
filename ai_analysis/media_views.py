@@ -35,6 +35,16 @@ def serve_media_file(request, file_path):
     # Check if file exists
     if not os.path.exists(full_path) or not os.path.isfile(full_path):
         print(f"❌ Media file not found: {full_path}")
+        print(f"❌ MEDIA_ROOT: {media_root}")
+        print(f"❌ Requested file_path: {file_path}")
+        # List files in the directory to help debug
+        try:
+            dir_path = os.path.dirname(full_path)
+            if os.path.exists(dir_path):
+                files = os.listdir(dir_path)
+                print(f"📁 Files in directory: {files}")
+        except Exception as e:
+            print(f"⚠️ Could not list directory: {e}")
         raise Http404("File not found")
     
     # Determine content type based on file extension
