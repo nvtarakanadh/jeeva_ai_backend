@@ -157,25 +157,34 @@ def password_reset_request_view(request):
         expires_at=expires_at
     )
     
-    # In development mode, always print the reset link to console
+    # Always print the reset link to console/logs (for debugging in production too)
+    reset_link = f"{settings.FRONTEND_URL}/auth/reset-password?token={token}"
+    print(f"\n{'='*80}")
+    print(f"{' '*20}PASSWORD RESET LINK")
+    print(f"{'='*80}")
+    print(f"Email: {user.email}")
+    print(f"Reset Link: {reset_link}")
+    print(f"{'='*80}\n")
     if settings.DEBUG:
-        reset_link = f"{settings.FRONTEND_URL}/auth/reset-password?token={token}"
-        print(f"\n{'='*80}")
-        print(f"{' '*20}PASSWORD RESET LINK (Development Mode)")
-        print(f"{'='*80}")
-        print(f"Email: {user.email}")
-        print(f"Reset Link: {reset_link}")
-        print(f"{'='*80}\n")
         print("⚠️  IMPORTANT: In development mode, emails are NOT sent via SMTP.")
         print("⚠️  Copy the reset link above and use it to reset your password.\n")
+    else:
+        print("⚠️  Check Railway logs above for the reset link if email is not received.\n")
     
     # Send email with reset link in background thread to avoid blocking
     def send_email_async():
         try:
+            print(f"Attempting to send password reset email to {user.email}...")
             send_password_reset_email(user, token)
+            print(f"✅ Password reset email sent successfully to {user.email}")
         except Exception as e:
             # Log error but don't block the response
-            print(f"Error sending email: {str(e)}")
+            print(f"❌ Error sending email to {user.email}: {str(e)}")
+            print(f"❌ Email backend: {settings.EMAIL_BACKEND}")
+            print(f"❌ Email host: {settings.EMAIL_HOST}")
+            print(f"❌ Email user configured: {bool(settings.EMAIL_HOST_USER)}")
+            import traceback
+            print(f"❌ Full traceback:\n{traceback.format_exc()}")
     
     # Start email sending in background thread
     email_thread = threading.Thread(target=send_email_async)

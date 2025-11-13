@@ -47,6 +47,7 @@ def send_password_reset_email(user, token):
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@jeeva.ai')
     
     try:
+        print(f"Sending password reset email via {settings.EMAIL_BACKEND}...")
         send_mail(
             subject=subject,
             message=plain_message,
@@ -55,9 +56,15 @@ def send_password_reset_email(user, token):
             html_message=html_message,
             fail_silently=False,
         )
+        print(f"✅ Email sent successfully to {user.email}")
         return True
     except Exception as e:
-        print(f"Error sending email: {str(e)}")
+        print(f"❌ Error sending email: {str(e)}")
+        print(f"❌ Email backend: {settings.EMAIL_BACKEND}")
+        print(f"❌ From email: {from_email}")
+        print(f"❌ To email: {user.email}")
+        import traceback
+        print(f"❌ Full traceback:\n{traceback.format_exc()}")
         raise
 
 
