@@ -725,9 +725,17 @@ def health_record_detail(request, record_id):
                 'error': 'Health record not found'
             }, status_code=status.HTTP_404_NOT_FOUND)
         
-        if request.method == 'GET':
-            serializer = HealthRecordSerializer(record)
-            return cors_response(serializer.data, status_code=status.HTTP_200_OK)
+            if request.method == 'GET':
+                serializer = HealthRecordSerializer(record)
+                record_data = serializer.data
+                
+                # Convert relative file URL to absolute HTTPS URL
+                if record_data.get('file_url') and record_data['file_url'].startswith('/'):
+                    scheme = 'https' if not settings.DEBUG else request.scheme
+                    host = request.get_host()
+                    record_data['file_url'] = f"{scheme}://{host}{record_data['file_url']}"
+                
+                return cors_response(record_data, status_code=status.HTTP_200_OK)
         
         elif request.method == 'PUT':
             data = request.data.copy()
@@ -798,16 +806,12 @@ def health_record_upload_file(request):
             for chunk in file.chunks():
                 destination.write(chunk)
         
-        # Generate file URL - use absolute URL for production
+        # Generate file URL - use absolute HTTPS URL for production
         file_url = f"{settings.MEDIA_URL}health_records/{user_profile.id}/{filename}"
-        # For production, generate absolute URL
-        if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
-            file_url = f"{settings.BASE_URL}{file_url}"
-        else:
-            # Use request to build absolute URL
-            scheme = request.scheme
-            host = request.get_host()
-            file_url = f"{scheme}://{host}{file_url}"
+        # For production, generate absolute HTTPS URL
+        scheme = 'https' if not settings.DEBUG else request.scheme
+        host = request.get_host()
+        file_url = f"{scheme}://{host}{file_url}"
         
         return cors_response({
             'message': 'File uploaded successfully',
