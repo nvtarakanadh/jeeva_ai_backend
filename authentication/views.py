@@ -171,33 +171,50 @@ def password_reset_request_view(request):
     else:
         print("⚠️  Check Railway logs above for the reset link if email is not received.\n")
     
+    # Track if email was sent successfully
+    email_sent = {'status': False}
+    
     # Send email with reset link in background thread to avoid blocking
     def send_email_async():
         try:
             print(f"Attempting to send password reset email to {user.email}...")
-            send_password_reset_email(user, token)
-            print(f"✅ Password reset email sent successfully to {user.email}")
+            result = send_password_reset_email(user, token)
+            email_sent['status'] = result
+            if result:
+                print(f"✅ Password reset email sent successfully to {user.email}")
+            else:
+                print(f"⚠️ Password reset email failed to send to {user.email}")
+                print(f"💡 Use the reset link from logs: {reset_link}")
         except Exception as e:
             # Log error but don't block the response
+            email_sent['status'] = False
             print(f"❌ Error sending email to {user.email}: {str(e)}")
             print(f"❌ Email backend: {settings.EMAIL_BACKEND}")
             print(f"❌ Email host: {settings.EMAIL_HOST}")
             print(f"❌ Email user configured: {bool(settings.EMAIL_HOST_USER)}")
             import traceback
             print(f"❌ Full traceback:\n{traceback.format_exc()}")
+            print(f"💡 Use the reset link from logs: {reset_link}")
     
     # Start email sending in background thread
     email_thread = threading.Thread(target=send_email_async)
     email_thread.daemon = True  # Thread will exit when main program exits
     email_thread.start()
     
-    # Return response immediately without waiting for email
-    response_message = 'If an account exists with this email, a password reset link has been sent.'
+    # Prepare response
+    response_data = {
+        'message': 'If an account exists with this email, a password reset link has been sent.',
+    }
+    
+    # Always include reset link in response for easy access (especially when email fails)
+    # This helps users get the link immediately without checking logs
+    response_data['reset_link'] = reset_link
+    response_data['note'] = 'Check your email. If email is not received, use the reset_link from this response.'
+    
     if settings.DEBUG:
-        response_message += ' Check the Django console for the reset link.'
-    return Response({
-        'message': response_message
-    }, status=status.HTTP_200_OK)
+        response_data['message'] += ' Check the Django console for the reset link.'
+    
+    return Response(response_data, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
