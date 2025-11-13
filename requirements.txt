@@ -14,6 +14,7 @@ whitenoise==6.8.2
 djangorestframework-simplejwt==5.3.1
 # Email support
 django-ses==3.5.0
+resend==2.4.0
 # PDF processing libraries (from original medical report analyzer)
 PyPDF2>=3.0.0
 pdfplumber>=0.9.0
