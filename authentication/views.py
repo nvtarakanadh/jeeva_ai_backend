@@ -8,6 +8,7 @@ from django.conf import settings
 from datetime import timedelta
 import secrets
 import hashlib
+import threading
 
 from .models import UserProfile, PasswordResetToken
 from .serializers import (
@@ -168,26 +169,26 @@ def password_reset_request_view(request):
         print("⚠️  IMPORTANT: In development mode, emails are NOT sent via SMTP.")
         print("⚠️  Copy the reset link above and use it to reset your password.\n")
     
-    # Send email with reset link
-    try:
-        send_password_reset_email(user, token)
-        # In development, console backend will also print the email
-        response_message = 'If an account exists with this email, a password reset link has been sent.'
-        if settings.DEBUG:
-            response_message += ' Check the Django console for the reset link.'
-        return Response({
-            'message': response_message
-        }, status=status.HTTP_200_OK)
-    except Exception as e:
-        # Log error but don't reveal it to user
-        print(f"Error sending email: {str(e)}")
-        # In development, the link was already printed above
-        response_message = 'If an account exists with this email, a password reset link has been sent.'
-        if settings.DEBUG:
-            response_message += ' Check the Django console for the reset link.'
-        return Response({
-            'message': response_message
-        }, status=status.HTTP_200_OK)
+    # Send email with reset link in background thread to avoid blocking
+    def send_email_async():
+        try:
+            send_password_reset_email(user, token)
+        except Exception as e:
+            # Log error but don't block the response
+            print(f"Error sending email: {str(e)}")
+    
+    # Start email sending in background thread
+    email_thread = threading.Thread(target=send_email_async)
+    email_thread.daemon = True  # Thread will exit when main program exits
+    email_thread.start()
+    
+    # Return response immediately without waiting for email
+    response_message = 'If an account exists with this email, a password reset link has been sent.'
+    if settings.DEBUG:
+        response_message += ' Check the Django console for the reset link.'
+    return Response({
+        'message': response_message
+    }, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
