@@ -343,8 +343,12 @@ def analyze_health_record(request):
         }, status_code=status.HTTP_200_OK)
         
     except Exception as e:
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"❌ Error in analyze_health_record: {str(e)}")
+        print(f"❌ Traceback: {error_traceback}")
         return cors_response(
-            {'error': f'Analysis failed: {str(e)}'}, 
+            {'error': f'Analysis failed: {str(e)}', 'details': str(error_traceback) if settings.DEBUG else None}, 
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
