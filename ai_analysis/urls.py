@@ -1,7 +1,10 @@
-from django.urls import path
+from django.urls import path, re_path
 from . import views
+from . import media_views
 
 urlpatterns = [
+    # Media file serving (for production)
+    re_path(r'^media/(?P<file_path>.*)$', media_views.serve_media_file, name='serve_media'),
     # Existing AI analysis endpoints
     path('analyze/prescription/', views.analyze_prescription, name='analyze_prescription'),
     path('analyze/health-record/', views.analyze_health_record, name='analyze_health_record'),
