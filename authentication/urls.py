@@ -4,7 +4,8 @@ from .views import (
     RegisterView, LoginView, logout_view, current_user_view,
     password_reset_request_view, password_reset_confirm_view,
     change_password_view, profile_view, delete_account_view,
-    list_doctors_view, list_patients_view
+    list_doctors_view, list_patients_view, doctor_patients_detailed_view,
+    doctor_dashboard_stats_view
 )
 
 app_name = 'authentication'
@@ -29,5 +30,7 @@ urlpatterns = [
     # User lists for appointments
     path('doctors/', list_doctors_view, name='list_doctors'),
     path('patients/', list_patients_view, name='list_patients'),
+    path('doctor/patients/detailed/', doctor_patients_detailed_view, name='doctor_patients_detailed'),
+    path('doctor/dashboard/stats/', doctor_dashboard_stats_view, name='doctor_dashboard_stats'),
 ]
 

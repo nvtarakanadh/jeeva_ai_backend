@@ -10,7 +10,8 @@ import secrets
 import hashlib
 import threading
 
-from .models import UserProfile, PasswordResetToken
+from .models import UserProfile, PasswordResetToken, RecordAccess, ConsentRequest
+from django.db import models
 from .serializers import (
     RegisterSerializer, LoginSerializer, UserSerializer,
     PasswordResetRequestSerializer, PasswordResetConfirmSerializer,
@@ -381,7 +382,7 @@ def list_doctors_view(request):
 @api_view(['GET', 'OPTIONS'])
 @permission_classes([permissions.IsAuthenticated])
 def list_patients_view(request):
-    """List all patients for doctor appointment scheduling"""
+    """List patients that the doctor has access to (via RecordAccess)"""
     # Handle OPTIONS preflight request
     if request.method == 'OPTIONS':
         return cors_response({}, status_code=status.HTTP_200_OK)
@@ -393,23 +394,34 @@ def list_patients_view(request):
                 'error': 'Only doctors can access this endpoint'
             }, status_code=status.HTTP_403_FORBIDDEN)
         
-        # Get all user profiles with role='patient'
-        patients = User.objects.filter(role='patient').select_related('profile')
+        # Get doctor's profile
+        doctor_profile = UserProfile.objects.filter(user=request.user).first()
+        if not doctor_profile:
+            return cors_response({
+                'error': 'Doctor profile not found'
+            }, status_code=status.HTTP_404_NOT_FOUND)
+        
+        # Get patients that this doctor has active access to via RecordAccess
+        from django.utils import timezone
+        now = timezone.now()
+        
+        record_accesses = RecordAccess.objects.filter(
+            doctor=doctor_profile,
+            is_active=True
+        ).filter(
+            models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=now)
+        ).select_related('patient', 'patient__user')
         
         patients_list = []
-        for patient in patients:
-            try:
-                profile = patient.profile
-                if profile:
-                    patients_list.append({
-                        'id': str(profile.id),
-                        'name': profile.full_name or patient.email,
-                        'email': patient.email,
-                        'phone': patient.phone or '',
-                    })
-            except UserProfile.DoesNotExist:
-                # Skip patients without profiles
-                continue
+        for access in record_accesses:
+            patient_profile = access.patient
+            patient_user = patient_profile.user
+            patients_list.append({
+                'id': str(patient_profile.id),
+                'name': patient_profile.full_name or patient_user.email,
+                'email': patient_user.email,
+                'phone': patient_user.phone or '',
+            })
         
         return cors_response({
             'count': len(patients_list),
@@ -422,4 +434,158 @@ def list_patients_view(request):
         print(traceback.format_exc())
         return cors_response({
             'error': f'Failed to fetch patients: {str(e)}'
+        }, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET', 'OPTIONS'])
+@permission_classes([permissions.IsAuthenticated])
+def doctor_patients_detailed_view(request):
+    """Get detailed patient list for doctor with stats (consent status, record counts, etc.)"""
+    # Handle OPTIONS preflight request
+    if request.method == 'OPTIONS':
+        return cors_response({}, status_code=status.HTTP_200_OK)
+    
+    try:
+        # Only doctors can access this
+        if request.user.role != 'doctor':
+            return cors_response({
+                'error': 'Only doctors can access this endpoint'
+            }, status_code=status.HTTP_403_FORBIDDEN)
+        
+        # Get doctor's profile
+        doctor_profile = UserProfile.objects.filter(user=request.user).first()
+        if not doctor_profile:
+            return cors_response({
+                'error': 'Doctor profile not found'
+            }, status_code=status.HTTP_404_NOT_FOUND)
+        
+        # Get patients that this doctor has active access to
+        from django.utils import timezone
+        from django.db.models import Count, Q, Max
+        from ai_analysis.models import HealthRecord
+        
+        now = timezone.now()
+        
+        # Get active record accesses
+        record_accesses = RecordAccess.objects.filter(
+            doctor=doctor_profile,
+            is_active=True
+        ).filter(
+            models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=now)
+        ).select_related('patient', 'patient__user', 'consent_request')
+        
+        patients_list = []
+        for access in record_accesses:
+            patient_profile = access.patient
+            patient_user = patient_profile.user
+            
+            # Get consent status
+            consent_status = 'active'
+            if access.consent_request:
+                consent_status = access.consent_request.status
+            elif access.expires_at and access.expires_at < now:
+                consent_status = 'expired'
+            
+            # Count health records for this patient
+            health_record_count = HealthRecord.objects.filter(patient=patient_profile).count()
+            
+            # Calculate age
+            age = None
+            if patient_profile.date_of_birth:
+                today = timezone.now().date()
+                age = today.year - patient_profile.date_of_birth.year - (
+                    (today.month, today.day) < (patient_profile.date_of_birth.month, patient_profile.date_of_birth.day)
+                )
+            
+            patients_list.append({
+                'id': str(patient_profile.id),
+                'userId': str(patient_user.id),
+                'name': patient_profile.full_name or patient_user.email,
+                'email': patient_user.email,
+                'phone': patient_user.phone or '',
+                'age': age or 25,
+                'gender': patient_profile.gender or 'Unknown',
+                'lastVisit': patient_profile.updated_at.isoformat() if patient_profile.updated_at else patient_profile.created_at.isoformat(),
+                'consentStatus': consent_status,
+                'recordCount': health_record_count,
+            })
+        
+        return cors_response({
+            'count': len(patients_list),
+            'results': patients_list
+        }, status_code=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(f"❌ Error in doctor_patients_detailed_view: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return cors_response({
+            'error': f'Failed to fetch patient details: {str(e)}'
+        }, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET', 'OPTIONS'])
+@permission_classes([permissions.IsAuthenticated])
+def doctor_dashboard_stats_view(request):
+    """Get dashboard statistics for doctor (total patients, consents, records)"""
+    # Handle OPTIONS preflight request
+    if request.method == 'OPTIONS':
+        return cors_response({}, status_code=status.HTTP_200_OK)
+    
+    try:
+        # Only doctors can access this
+        if request.user.role != 'doctor':
+            return cors_response({
+                'error': 'Only doctors can access this endpoint'
+            }, status_code=status.HTTP_403_FORBIDDEN)
+        
+        # Get doctor's profile
+        doctor_profile = UserProfile.objects.filter(user=request.user).first()
+        if not doctor_profile:
+            return cors_response({
+                'error': 'Doctor profile not found'
+            }, status_code=status.HTTP_404_NOT_FOUND)
+        
+        from django.utils import timezone
+        from django.db.models import Count, Q
+        from ai_analysis.models import HealthRecord
+        
+        now = timezone.now()
+        
+        # Count unique patients with active access
+        unique_patients = RecordAccess.objects.filter(
+            doctor=doctor_profile,
+            is_active=True
+        ).filter(
+            models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=now)
+        ).values('patient').distinct().count()
+        
+        # Count consent requests
+        consent_requests = ConsentRequest.objects.filter(doctor=doctor_profile)
+        pending_consents = consent_requests.filter(status='pending').count()
+        active_consents = consent_requests.filter(status='approved').count()
+        
+        # Count total health records for patients this doctor has access to
+        patient_ids = RecordAccess.objects.filter(
+            doctor=doctor_profile,
+            is_active=True
+        ).filter(
+            models.Q(expires_at__isnull=True) | models.Q(expires_at__gt=now)
+        ).values_list('patient_id', flat=True)
+        
+        total_records = HealthRecord.objects.filter(patient_id__in=patient_ids).count()
+        
+        return cors_response({
+            'totalPatients': unique_patients,
+            'pendingConsents': pending_consents,
+            'activeConsents': active_consents,
+            'totalRecords': total_records
+        }, status_code=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(f"❌ Error in doctor_dashboard_stats_view: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return cors_response({
+            'error': f'Failed to fetch dashboard stats: {str(e)}'
         }, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
