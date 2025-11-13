@@ -15,8 +15,8 @@ urlpatterns = [
     path('mri-ct-analyses/', views.list_mri_ct_analyses, name='list_mri_ct_analyses'),
     path('mri-ct-analysis/<str:record_id>/doctor-access/', views.update_doctor_access, name='update_doctor_access'),
     
-    # Health Records CRUD endpoints
-    path('health-records/', views.health_records_list_create, name='health_records_list_create'),
-    path('health-records/<str:record_id>/', views.health_record_detail, name='health_record_detail'),
+    # Health Records CRUD endpoints (order matters - more specific paths first)
     path('health-records/upload/', views.health_record_upload_file, name='health_record_upload_file'),
+    path('health-records/<str:record_id>/', views.health_record_detail, name='health_record_detail'),
+    path('health-records/', views.health_records_list_create, name='health_records_list_create'),
 ]
