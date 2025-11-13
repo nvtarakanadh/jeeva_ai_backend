@@ -1686,10 +1686,27 @@ def analyze_health_record_with_ai(record_data: Dict) -> Dict:
             }
         else:
             # For other record types (including lab reports), use specialized lab report analysis
-            return analyze_lab_report_with_ai(record_data)
+            try:
+                return analyze_lab_report_with_ai(record_data)
+            except Exception as lab_error:
+                print(f"❌ Lab report analysis failed: {str(lab_error)}")
+                # Return fallback if lab report analysis fails
+                return create_fallback_analysis(record_type, title, description, str(lab_error))
+        
+        # If we get here and no API keys, return fallback
+        if not has_gemini_key:
+            print("⚠️ No Gemini API key configured. Returning fallback analysis.")
+            return create_fallback_analysis(record_type, title, description)
         
     except Exception as e:
-        raise Exception(f"Error analyzing health record: {str(e)}")
+        print(f"❌ Error in analyze_health_record_with_ai: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        # Return fallback instead of raising exception
+        record_type = record_data.get('record_type', 'unknown')
+        title = record_data.get('title', 'Health Record')
+        description = record_data.get('description', '')
+        return create_fallback_analysis(record_type, title, description, str(e))
 
 
 # =============================================================================
