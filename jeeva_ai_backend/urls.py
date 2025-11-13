@@ -27,9 +27,14 @@ urlpatterns = [
     path('api/auth/', include('authentication.urls')),
 ]
 
-# Serve media files in development
+# Serve media files
 if settings.DEBUG:
+    # In development, use Django's static file serving
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 else:
-    # In production, media files are served via ai_analysis.urls (media_views)
-    pass
+    # In production, serve media files via custom view
+    from ai_analysis import media_views
+    from django.urls import re_path
+    urlpatterns += [
+        re_path(r'^media/(?P<file_path>.*)$', media_views.serve_media_file, name='serve_media'),
+    ]
