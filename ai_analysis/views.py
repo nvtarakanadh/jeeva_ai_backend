@@ -651,8 +651,8 @@ def health_records_list_create(request):
                 file_url = data['file_url']
                 # If it's a relative path, convert to absolute URL
                 if file_url.startswith('/'):
-                    # Get the base URL from request
-                    scheme = request.scheme
+                    # Get the base URL from request - use HTTPS in production
+                    scheme = 'https' if not settings.DEBUG else request.scheme
                     host = request.get_host()
                     data['file_url'] = f"{scheme}://{host}{file_url}"
                 # If it's already a full URL, keep it as is
@@ -788,11 +788,16 @@ def health_record_upload_file(request):
             for chunk in file.chunks():
                 destination.write(chunk)
         
-        # Generate file URL
+        # Generate file URL - use absolute URL for production
         file_url = f"{settings.MEDIA_URL}health_records/{user_profile.id}/{filename}"
-        # For production, you might want to use a full URL
-        if hasattr(settings, 'BASE_URL'):
+        # For production, generate absolute URL
+        if hasattr(settings, 'BASE_URL') and settings.BASE_URL:
             file_url = f"{settings.BASE_URL}{file_url}"
+        else:
+            # Use request to build absolute URL
+            scheme = request.scheme
+            host = request.get_host()
+            file_url = f"{scheme}://{host}{file_url}"
         
         return cors_response({
             'message': 'File uploaded successfully',
