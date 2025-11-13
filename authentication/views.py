@@ -21,6 +21,17 @@ from .utils import send_password_reset_email
 User = get_user_model()
 
 
+def cors_response(data, status_code=200):
+    """Helper function to add CORS headers to responses"""
+    response = Response(data, status=status_code)
+    response['Access-Control-Allow-Origin'] = '*'
+    response['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, HEAD'
+    response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Cache-Control, X-Requested-With, Accept, Origin'
+    response['Access-Control-Allow-Credentials'] = 'true'
+    response['Access-Control-Max-Age'] = '86400'
+    return response
+
+
 class RegisterView(generics.CreateAPIView):
     """User registration endpoint"""
     queryset = User.objects.all()
@@ -323,3 +334,92 @@ def profile_view(request):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET', 'OPTIONS'])
+@permission_classes([permissions.IsAuthenticated])
+def list_doctors_view(request):
+    """List all doctors for patient appointment booking"""
+    # Handle OPTIONS preflight request
+    if request.method == 'OPTIONS':
+        return cors_response({}, status_code=status.HTTP_200_OK)
+    
+    try:
+        # Get all user profiles with role='doctor'
+        doctors = User.objects.filter(role='doctor').select_related('profile')
+        
+        doctors_list = []
+        for doctor in doctors:
+            try:
+                profile = doctor.profile
+                if profile:
+                    doctors_list.append({
+                        'id': str(profile.id),
+                        'name': profile.full_name or doctor.email,
+                        'specialization': profile.specialization or 'General Medicine',
+                        'email': doctor.email,
+                        'hospital': profile.hospital or '',
+                    })
+            except UserProfile.DoesNotExist:
+                # Skip doctors without profiles
+                continue
+        
+        return cors_response({
+            'count': len(doctors_list),
+            'results': doctors_list
+        }, status_code=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(f"❌ Error in list_doctors_view: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return cors_response({
+            'error': f'Failed to fetch doctors: {str(e)}'
+        }, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET', 'OPTIONS'])
+@permission_classes([permissions.IsAuthenticated])
+def list_patients_view(request):
+    """List all patients for doctor appointment scheduling"""
+    # Handle OPTIONS preflight request
+    if request.method == 'OPTIONS':
+        return cors_response({}, status_code=status.HTTP_200_OK)
+    
+    try:
+        # Only doctors can list patients
+        if request.user.role != 'doctor':
+            return cors_response({
+                'error': 'Only doctors can access this endpoint'
+            }, status_code=status.HTTP_403_FORBIDDEN)
+        
+        # Get all user profiles with role='patient'
+        patients = User.objects.filter(role='patient').select_related('profile')
+        
+        patients_list = []
+        for patient in patients:
+            try:
+                profile = patient.profile
+                if profile:
+                    patients_list.append({
+                        'id': str(profile.id),
+                        'name': profile.full_name or patient.email,
+                        'email': patient.email,
+                        'phone': patient.phone or '',
+                    })
+            except UserProfile.DoesNotExist:
+                # Skip patients without profiles
+                continue
+        
+        return cors_response({
+            'count': len(patients_list),
+            'results': patients_list
+        }, status_code=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(f"❌ Error in list_patients_view: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return cors_response({
+            'error': f'Failed to fetch patients: {str(e)}'
+        }, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
