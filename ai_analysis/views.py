@@ -632,14 +632,33 @@ def health_records_list_create(request):
                     data['record_date'] = datetime.fromisoformat(data['record_date'].replace('Z', '+00:00'))
                 except:
                     try:
-                        data['record_date'] = datetime.strptime(data['record_date'], '%Y-%m-%d')
-                    except:
-                        pass
+                        # Parse date string like '2025-11-13'
+                        parsed_date = datetime.strptime(data['record_date'], '%Y-%m-%d')
+                        # Convert to timezone-aware datetime
+                        data['record_date'] = timezone.make_aware(parsed_date)
+                    except Exception as e:
+                        print(f"⚠️ Could not parse record_date: {data['record_date']}, error: {e}")
+                        # Set to None if parsing fails
+                        data['record_date'] = None
+            
+            # Convert relative file_url to absolute URL if needed
+            if 'file_url' in data and data['file_url']:
+                file_url = data['file_url']
+                # If it's a relative path, convert to absolute URL
+                if file_url.startswith('/'):
+                    # Get the base URL from request
+                    scheme = request.scheme
+                    host = request.get_host()
+                    data['file_url'] = f"{scheme}://{host}{file_url}"
+                # If it's already a full URL, keep it as is
             
             # Set uploaded_by_profile
             data['uploaded_by_profile'] = user_profile.id
             if 'uploaded_by' not in data:
                 data['uploaded_by'] = str(request.user.id)
+            
+            # Log the data being sent to serializer for debugging
+            print(f"📋 Creating health record with data: {data}")
             
             serializer = HealthRecordSerializer(data=data)
             if serializer.is_valid():
@@ -649,6 +668,8 @@ def health_records_list_create(request):
                     'record': HealthRecordSerializer(record).data
                 }, status_code=status.HTTP_201_CREATED)
             else:
+                # Log detailed validation errors
+                print(f"❌ Validation errors: {serializer.errors}")
                 return cors_response({
                     'error': 'Validation failed',
                     'details': serializer.errors
