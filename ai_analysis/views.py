@@ -1,11 +1,14 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, parser_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
+from django.conf import settings
 from datetime import datetime
 import uuid
 import requests
+import os
 
 from .models import HealthRecord, AIAnalysis
 from .serializers import (
@@ -15,6 +18,7 @@ from .serializers import (
     HealthRecordAnalysisRequestSerializer
 )
 from .ai_services import analyze_prescription_with_gemini, analyze_health_record_with_ai
+from authentication.models import UserProfile
 
 
 def cors_response(data, status_code=200):
@@ -581,4 +585,200 @@ def update_doctor_access(request, record_id):
         print(f"❌ Error updating doctor access: {str(e)}")
         return cors_response({
             'error': f'Failed to update doctor access: {str(e)}'
+        }, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Health Records CRUD API Endpoints
+
+@api_view(['GET', 'POST', 'OPTIONS'])
+@permission_classes([IsAuthenticated])
+def health_records_list_create(request):
+    """
+    List all health records for the authenticated user or create a new one.
+    GET: Returns list of health records for the current user
+    POST: Creates a new health record
+    """
+    # Handle OPTIONS preflight request
+    if request.method == 'OPTIONS':
+        return cors_response({}, status_code=status.HTTP_200_OK)
+    
+    try:
+        # Get user profile
+        user_profile = UserProfile.objects.filter(user=request.user).first()
+        if not user_profile:
+            return cors_response({
+                'error': 'User profile not found'
+            }, status_code=status.HTTP_404_NOT_FOUND)
+        
+        if request.method == 'GET':
+            # List health records for the current user
+            records = HealthRecord.objects.filter(patient=user_profile).order_by('-record_date', '-uploaded_at')
+            serializer = HealthRecordSerializer(records, many=True)
+            return cors_response({
+                'count': records.count(),
+                'results': serializer.data
+            }, status_code=status.HTTP_200_OK)
+        
+        elif request.method == 'POST':
+            # Create new health record
+            data = request.data.copy()
+            
+            # Set patient to current user's profile
+            data['patient'] = user_profile.id
+            
+            # Parse record_date if provided
+            if 'record_date' in data and isinstance(data['record_date'], str):
+                try:
+                    data['record_date'] = datetime.fromisoformat(data['record_date'].replace('Z', '+00:00'))
+                except:
+                    try:
+                        data['record_date'] = datetime.strptime(data['record_date'], '%Y-%m-%d')
+                    except:
+                        pass
+            
+            # Set uploaded_by_profile
+            data['uploaded_by_profile'] = user_profile.id
+            if 'uploaded_by' not in data:
+                data['uploaded_by'] = str(request.user.id)
+            
+            serializer = HealthRecordSerializer(data=data)
+            if serializer.is_valid():
+                record = serializer.save()
+                return cors_response({
+                    'message': 'Health record created successfully',
+                    'record': HealthRecordSerializer(record).data
+                }, status_code=status.HTTP_201_CREATED)
+            else:
+                return cors_response({
+                    'error': 'Validation failed',
+                    'details': serializer.errors
+                }, status_code=status.HTTP_400_BAD_REQUEST)
+    
+    except Exception as e:
+        print(f"❌ Error in health_records_list_create: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return cors_response({
+            'error': f'Failed to process request: {str(e)}'
+        }, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET', 'PUT', 'DELETE', 'OPTIONS'])
+@permission_classes([IsAuthenticated])
+def health_record_detail(request, record_id):
+    """
+    Retrieve, update, or delete a specific health record.
+    """
+    # Handle OPTIONS preflight request
+    if request.method == 'OPTIONS':
+        return cors_response({}, status_code=status.HTTP_200_OK)
+    
+    try:
+        # Get user profile
+        user_profile = UserProfile.objects.filter(user=request.user).first()
+        if not user_profile:
+            return cors_response({
+                'error': 'User profile not found'
+            }, status_code=status.HTTP_404_NOT_FOUND)
+        
+        # Get the record
+        try:
+            record = HealthRecord.objects.get(id=record_id, patient=user_profile)
+        except HealthRecord.DoesNotExist:
+            return cors_response({
+                'error': 'Health record not found'
+            }, status_code=status.HTTP_404_NOT_FOUND)
+        
+        if request.method == 'GET':
+            serializer = HealthRecordSerializer(record)
+            return cors_response(serializer.data, status_code=status.HTTP_200_OK)
+        
+        elif request.method == 'PUT':
+            data = request.data.copy()
+            serializer = HealthRecordSerializer(record, data=data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return cors_response({
+                    'message': 'Health record updated successfully',
+                    'record': serializer.data
+                }, status_code=status.HTTP_200_OK)
+            else:
+                return cors_response({
+                    'error': 'Validation failed',
+                    'details': serializer.errors
+                }, status_code=status.HTTP_400_BAD_REQUEST)
+        
+        elif request.method == 'DELETE':
+            record.delete()
+            return cors_response({
+                'message': 'Health record deleted successfully'
+            }, status_code=status.HTTP_200_OK)
+    
+    except Exception as e:
+        print(f"❌ Error in health_record_detail: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return cors_response({
+            'error': f'Failed to process request: {str(e)}'
+        }, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST', 'OPTIONS'])
+@parser_classes([MultiPartParser, FormParser])
+@permission_classes([IsAuthenticated])
+def health_record_upload_file(request):
+    """
+    Upload a file for a health record.
+    Returns the file URL that can be used when creating/updating health records.
+    """
+    # Handle OPTIONS preflight request
+    if request.method == 'OPTIONS':
+        return cors_response({}, status_code=status.HTTP_200_OK)
+    
+    try:
+        if 'file' not in request.FILES:
+            return cors_response({
+                'error': 'No file provided'
+            }, status_code=status.HTTP_400_BAD_REQUEST)
+        
+        file = request.FILES['file']
+        user_profile = UserProfile.objects.filter(user=request.user).first()
+        if not user_profile:
+            return cors_response({
+                'error': 'User profile not found'
+            }, status_code=status.HTTP_404_NOT_FOUND)
+        
+        # Create upload directory if it doesn't exist
+        upload_dir = os.path.join(settings.MEDIA_ROOT, 'health_records', str(user_profile.id))
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Generate unique filename
+        file_ext = file.name.split('.')[-1] if '.' in file.name else ''
+        filename = f"{uuid.uuid4()}.{file_ext}" if file_ext else str(uuid.uuid4())
+        file_path = os.path.join(upload_dir, filename)
+        
+        # Save file
+        with open(file_path, 'wb+') as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
+        
+        # Generate file URL
+        file_url = f"{settings.MEDIA_URL}health_records/{user_profile.id}/{filename}"
+        # For production, you might want to use a full URL
+        if hasattr(settings, 'BASE_URL'):
+            file_url = f"{settings.BASE_URL}{file_url}"
+        
+        return cors_response({
+            'message': 'File uploaded successfully',
+            'file_url': file_url,
+            'file_name': file.name,
+            'file_size': file.size
+        }, status_code=status.HTTP_201_CREATED)
+    
+    except Exception as e:
+        print(f"❌ Error in health_record_upload_file: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return cors_response({
+            'error': f'Failed to upload file: {str(e)}'
         }, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
