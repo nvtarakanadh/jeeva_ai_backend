@@ -95,41 +95,63 @@ This is an automated message from Jeeva AI. Please do not reply to this email.
 
 
 def send_welcome_email(user):
-    """Send welcome email to newly registered user"""
-    subject = 'Welcome to Jeeva AI'
+    """Send welcome email to newly registered user using professional email service"""
+    subject = 'Welcome to Jeeva AI!'
     
     html_message = f"""
+    <!DOCTYPE html>
     <html>
-    <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #2563eb;">Welcome to Jeeva AI!</h2>
-            <p>Hello {user.get_full_name() or user.email},</p>
-            <p>Thank you for registering with Jeeva AI. Your account has been created successfully.</p>
-            <p>You can now access all features of our healthcare platform.</p>
-            <p>If you have any questions, please don't hesitate to contact our support team.</p>
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-            <p style="color: #666; font-size: 12px;">
-                This is an automated message from Jeeva AI. Please do not reply to this email.
-            </p>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4;">
+        <div style="max-width: 600px; margin: 40px auto; padding: 0; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 30px 20px; text-align: center;">
+                <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Welcome to Jeeva AI!</h1>
+            </div>
+            <div style="padding: 40px 30px;">
+                <h2 style="color: #1f2937; margin-top: 0; font-size: 22px; font-weight: 600;">Hello {user.get_full_name() or user.email}!</h2>
+                <p style="color: #4b5563; font-size: 16px; margin: 20px 0;">Thank you for registering with Jeeva AI. Your account has been created successfully.</p>
+                <p style="color: #4b5563; font-size: 16px; margin: 20px 0;">You can now access all features of our healthcare platform.</p>
+                <p style="color: #4b5563; font-size: 16px; margin: 20px 0;">If you have any questions, please don't hesitate to contact our support team.</p>
+            </div>
+            <div style="background-color: #f9fafb; padding: 20px 30px; border-top: 1px solid #e5e7eb;">
+                <p style="color: #9ca3af; font-size: 12px; margin: 0; text-align: center;">
+                    This is an automated message from Jeeva AI. Please do not reply to this email.
+                </p>
+            </div>
         </div>
     </body>
     </html>
     """
     
-    plain_message = strip_tags(html_message)
-    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@jeeva.ai')
+    plain_message = f"""
+Welcome to Jeeva AI!
+
+Hello {user.get_full_name() or user.email}!
+
+Thank you for registering with Jeeva AI. Your account has been created successfully.
+
+You can now access all features of our healthcare platform.
+
+If you have any questions, please don't hesitate to contact our support team.
+
+---
+This is an automated message from Jeeva AI. Please do not reply to this email.
+"""
     
+    # Use professional email service (non-blocking, welcome email is not critical)
     try:
-        send_mail(
+        send_email_professional(
+            to_email=user.email,
             subject=subject,
-            message=plain_message,
-            from_email=from_email,
-            recipient_list=[user.email],
-            html_message=html_message,
-            fail_silently=False,
+            html_content=html_message,
+            plain_text_content=plain_message
         )
         return True
     except Exception as e:
         print(f"Error sending welcome email: {str(e)}")
         # Don't raise - welcome email is not critical
+        return False
 
