@@ -151,7 +151,12 @@ def analyze_health_record(request):
         return cors_response({}, status_code=status.HTTP_200_OK)
     
     try:
-        serializer = HealthRecordAnalysisRequestSerializer(data=request.data)
+        # Convert empty string file_url to None to avoid URL validation errors
+        data = request.data.copy()
+        if 'file_url' in data and (data['file_url'] == '' or data['file_url'] is None):
+            data['file_url'] = None
+        
+        serializer = HealthRecordAnalysisRequestSerializer(data=data)
         if not serializer.is_valid():
             return cors_response(serializer.errors, status_code=status.HTTP_400_BAD_REQUEST)
         
