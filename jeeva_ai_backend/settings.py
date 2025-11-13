@@ -69,6 +69,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'jeeva_ai_backend.middleware.CORSExceptionMiddleware',  # Custom middleware to ensure CORS headers on errors
 ]
 
 ROOT_URLCONF = 'jeeva_ai_backend.urls'
