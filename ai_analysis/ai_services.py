@@ -1485,6 +1485,29 @@ def validate_diagnosis_data(data: Dict) -> bool:
     return all(key in data for key in required_keys)
 
 
+def create_fallback_analysis(record_type: str, title: str, description: str, error: str = None) -> Dict:
+    """Create a fallback analysis when AI services are unavailable"""
+    return {
+        "summary": f"This is a {record_type} record titled '{title}'. " + 
+                  (f"Description: {description[:200]}..." if description else "No description provided.") +
+                  (f"\n\nNote: AI analysis is currently unavailable. {error}" if error else "\n\nNote: AI analysis is currently unavailable. Please configure API keys."),
+        "simplifiedSummary": f"{record_type.title()} record: {title}",
+        "keyFindings": [
+            f"Record Type: {record_type}",
+            f"Title: {title}",
+        ] + ([f"Description: {description[:100]}..."] if description else []),
+        "riskWarnings": ["AI analysis unavailable - manual review recommended"],
+        "recommendations": [
+            "Please consult with a healthcare professional for detailed analysis",
+            "Ensure all relevant information is included in the record",
+            "Review the record for accuracy and completeness"
+        ],
+        "confidence": 0.0,
+        "analysisType": "Fallback Analysis",
+        "aiDisclaimer": "This is a fallback analysis. AI analysis services are currently unavailable. Please configure API keys or contact support."
+    }
+
+
 def create_fallback_diagnosis() -> Dict:
     """Create fallback diagnosis when AI analysis fails"""
     return {
