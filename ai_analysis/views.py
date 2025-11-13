@@ -726,8 +726,16 @@ def health_records_list_create(request):
             else:
                 # Log detailed validation errors
                 print(f"❌ Validation errors: {serializer.errors}")
+                # Format error message to be more user-friendly
+                error_messages = []
+                for field, errors in serializer.errors.items():
+                    if isinstance(errors, list):
+                        error_messages.append(f"{field}: {', '.join(str(e) for e in errors)}")
+                    else:
+                        error_messages.append(f"{field}: {errors}")
+                error_message = 'Validation failed. ' + '; '.join(error_messages)
                 return cors_response({
-                    'error': 'Validation failed',
+                    'error': error_message,
                     'details': serializer.errors
                 }, status_code=status.HTTP_400_BAD_REQUEST)
     
